@@ -1,10 +1,12 @@
-#include<stdio.h>
-#include<string.h>
-#include<unistd.h>
-#include<sys/wait.h>
-#include<setjmp.h>
-#include<signal.h>
-#include<stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <setjmp.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <limits.h>		// use for PATH_MAX (pwd)
+#include <sys/stat.h>
 
 #define MAXLINE 259
 #define PROMPT ">"
@@ -21,15 +23,19 @@ typedef struct {
 
 // built-in commands
 void execExit(char *cmd[]);
+void execPwd(char *cmd[]);
+void execChdir(char *cmd[]);
 builtInCmd builtInCmds[] = {
-	{"exit", execExit}
+	{"exit", execExit},
+	{"pwd", execPwd},
+	{"cd", execChdir}
 };
 
 int builtInCnt = sizeof(builtInCmds)/sizeof(builtInCmd);
 int isBuiltIn(char *cmd);
 void execBuiltIn(int i, char *cmd[]);
 
-// capture SIG_ING and recover
+// capture SIG_INT and recover
 sigjmp_buf ctrlc_buf;
 void ctrl_handlr(int signo) {
 	siglongjmp(ctrlc_buf, 1);
@@ -54,16 +60,17 @@ int main(int argc, char *argv[]) {
 		// prompt and get commandline
 		fputs(PROMPT, stdout);
 		fgets(line, MAXLINE, stdin);
-		
+
 		if (feof(stdin)) break; //exit on end of input
-		
+
 		// process commandline
 		if  (line[strlen(line) - 1] == '\n') {
 			line[strlen(line) - 1] = '\0';
 		}
-		
+
 		// build argument list
-		args[argn=0] = strtok(line, "\t");
+		args[argn=0] = strtok(line, " \t");
+
 		while (args[argn] != NULL && argn < MAX_ARG_LIST) {
 			args[++argn] = strtok(NULL, " \t");
 		}
@@ -71,7 +78,7 @@ int main(int argc, char *argv[]) {
 		// execute commandline
 		if ((cmdn = isBuiltIn(args[0])) > -1) {
 			execBuiltIn(cmdn, args);
-		} else { 
+		} else {
 			childPID = fork();
 			if (childPID == 0) {
 				execv(line, argv);
@@ -89,7 +96,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	return 0;
-	
+
 }
 
 int isBuiltIn(char *cmd) {
@@ -97,9 +104,8 @@ int isBuiltIn(char *cmd) {
 	while (i < builtInCnt) {
 		if (strcmp(cmd, builtInCmds[i].cmd) == 0) {
 			break;
-		} else {
-			i++;
 		}
+		++i;
 	}
 	return i < builtInCnt ? i : -1;
 }
@@ -113,6 +119,45 @@ void execBuiltIn(int i, char *cmd[]) {
 	} else {
 		fprintf(stderr, "ERROR: unknown built-in command\n");
 	}
+}
+
+// execPwd prints out the current working directory
+void execPwd(char *cmd[]) {
+	char *buf;
+	char *result;
+	int max_path = PATH_MAX + 1;
+	result = getcwd(buf, max_path);
+
+	if (result != NULL) {
+		fprintf(stdout, "%s\n", buf);
+	}
+
+	buf = NULL;
+}
+
+void execChdir(char *cmd[]) {
+	if (cmd[1] == NULL) {
+		fprintf(stderr, "ERROR: Path not specified.\n");
+		return;
+	}
+	char *path = cmd[1];
+	struct stat buffer;
+	if (stat(path, &buffer) == 0) {
+		fprintf(stdout, "here");
+		if (buffer.st_mode & S_IFDIR) {
+			int v = chdir(path);
+			if (v < 0) {
+				fprintf(stderr, "ERROR: Something went wrong.");
+    			return;
+			}
+    	} else {
+    		fprintf(stderr, "ERROR: Path specified is not a directory.");
+    		return;
+    	}
+	}
+
+
+
 }
 
 void execExit(char *cmd[]) {
