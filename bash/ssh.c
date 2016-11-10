@@ -74,7 +74,6 @@ int main(int argc, char *argv[]) {
 		while (args[argn] != NULL && argn < MAX_ARG_LIST) {
 			args[++argn] = strtok(NULL, " \t");
 		}
-
 		// execute commandline
 		if ((cmdn = isBuiltIn(args[0])) > -1) {
 			execBuiltIn(cmdn, args);
@@ -114,6 +113,7 @@ void execBuiltIn(int i, char *cmd[]) {
 	if (i == SEARCH_FOR_CMD) {
 		i = isBuiltIn(cmd[0]);
 	}
+
 	if (i >= 0 && i < builtInCnt) {
 		builtInCmds[i].func(cmd);
 	} else {
@@ -123,16 +123,17 @@ void execBuiltIn(int i, char *cmd[]) {
 
 // execPwd prints out the current working directory
 void execPwd(char *cmd[]) {
-	char *buf;
+	char *buffer;
 	char *result;
 	int max_path = PATH_MAX + 1;
-	result = getcwd(buf, max_path);
+
+	buffer = (char *) malloc(max_path);
+	result = getcwd(buffer, max_path);
 
 	if (result != NULL) {
-		fprintf(stdout, "%s\n", buf);
+		fprintf(stdout, "%s\n", buffer);
 	}
-
-	buf = NULL;
+	free(buffer);
 }
 
 void execChdir(char *cmd[]) {
@@ -143,7 +144,7 @@ void execChdir(char *cmd[]) {
 	char *path = cmd[1];
 	struct stat buffer;
 	if (stat(path, &buffer) == 0) {
-		fprintf(stdout, "here");
+		fprintf(stdout, "%hu\n" ,buffer.st_mode);
 		if (buffer.st_mode & S_IFDIR) {
 			int v = chdir(path);
 			if (v < 0) {
