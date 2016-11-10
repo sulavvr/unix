@@ -1,0 +1,296 @@
+#!/bin/bash
+# ************* contacts.sh ************
+# Name: Sulav Regmi
+# ID: 50211843
+# Unix Systems Programming
+# Dr. Jeff Jenness
+
+database='database';
+IFS=$'\n';
+overwrite=false;
+count=0;
+
+
+function create_db() {
+	if [ ! -f $database ]; then
+		touch $database;
+	fi
+}
+
+function save_to_db() {
+        if $overwrite; then
+                query_db;
+        fi
+
+        if [ $count -eq 0 ]; then
+                record=$last_name:$first_name:$email:$phone:;
+                echo $record >> database;
+                echo "Record saved successfully!";
+        else
+                echo "Record already exists! Cannot add!";
+        fi
+};
+
+function delete_from_db() {
+        l_name=$1;
+        f_name=$2;
+        found=false;
+        counter=1;
+
+        for line in $(cat $database); do
+                lname=$(echo $line | cut -d: -f1);
+                fname=$(echo $line | cut -d: -f2);
+                if [ "$lname" = "$l_name" ] && [ "$fname" = "$f_name" ]; then
+                        echo "Deleting record($counter): $fname $lname";
+                        sed -i "/$lname:$fname:/d" $database;
+                        found=true;
+                        counter=$[counter+1];
+                fi
+        done
+
+        if $found; then
+                echo "Deleted!";
+        else
+                echo "No record found or first name not given.";
+        fi
+};
+
+function replace_record() {
+	overwrite=true;
+	replace_email=$email;
+	replace_phone=$phone;
+	phone="";
+	email="";
+
+	query_db;
+
+	if [ $count -gt 0 ]; then
+		echo "Replacing email & phone for record: $first_name $last_name";
+              	for line in $(grep -e $query $database); do
+			em=$(echo $line | cut -d: -f3);
+			ph=$(echo $line | cut -d: -f4);
+			[[ "$replace_email" = "" ]] && re=$em || re=$replace_email;
+			[[ "$replace_phone" = "" ]] && rp=$ph || rp=$replace_phone;
+			
+			[[ $em ]] && em=".*" || em=$em;
+			[[ $ph ]] && ph=".*" || ph=$ph;
+			sed -i "s/$last_name:$first_name:$em:$ph:/$last_name:$first_name:$re:$rp:/" $database;
+
+                done
+		
+	fi
+
+};
+
+
+function query_db() {
+        [[ "$last_name" = "" ]] && last_name=.* || last_name=$last_name;
+        [[ "$first_name" = "" ]] && first_name=.* || first_name=$first_name;
+        [[ "$email" = "" ]] && email=.* || email=$email;
+        [[ "$phone" = "" ]] && phone=.* || phone=$phone;
+
+        query=$last_name:$first_name:$email:$phone:;
+        count=$(grep -c $query $database);
+	
+        if [ $overwrite == false ]; then
+                if [ $count -gt 0 ]; then
+                        echo "Number of Records found: $count";
+                        for line in $(grep -e $query $database); do
+                                echo "----------------------------------------"
+                                echo "First Name:" $(echo $line | cut -d: -f2);
+                                echo "Last Name:" $(echo $line | cut -d: -f1);
+                                echo "Email:" $(echo $line | cut -d: -f3);
+                                echo "Phone:" $(echo $line | cut -d: -f4);
+                                echo "----------------------------------------";
+
+                        done
+                else
+                        echo "No records found!";
+                fi
+        else
+                [[ "$last_name" = ".*" ]] && last_name="" || last_name=$last_name;
+                [[ "$first_name" = ".*" ]] && first_name="" || first_name=$first_name;
+                [[ "$email" = ".*" ]] && email="" || email=$email;
+                [[ "$phone" = ".*" ]] && phone="" || phone=$phone;
+        fi
+
+};
+
+create_db
+
+case "$1" in
+        read)
+                while [ $1 ]; do
+                        shift;
+                        case "$1" in
+                                -noclobber)
+                                        overwrite=true;
+                                        continue;
+					;;
+                        esac
+                done
+                echo "Please enter the following information:";
+                read -p "Contact first name: " first_name;
+                read -p "Contact last name: " last_name;
+
+                # loop until value of last name is not empty
+                while [ "$last_name" = "" ]; do
+                        read -p "Last name cannot be empty! Re-enter: " last_name;
+                done
+
+                read -p "Email address: " email;
+                read -p "Phone number: " phone;
+
+                save_to_db;
+                ;;
+        query)
+                while [ $1 ]; do
+                        shift;
+                        case "$1" in
+                                -firstname)
+                                        shift;
+                                        first_name=$1;
+                                        continue;
+                                        ;;
+                                -lastname)
+                                        shift;
+                                        last_name=$1;
+                                        continue;
+                                        ;;
+                                -email)
+                                        shift;
+                                        email=$1;
+                                        continue;
+                                        ;;
+                                -phone)
+                                        shift;
+                                        phone=$1;
+                                        continue;
+                                        ;;
+                        esac
+
+                done
+
+                query_db;
+
+                ;;
+        delete)
+                while [ $1 ]; do
+                        shift;
+                        case "$1" in
+                                -firstname)
+                                        shift;
+                                        first_name=$1;
+                                        continue;
+                                        ;;
+                                -lastname)
+                                        shift;
+                                        last_name=$1;
+                                        continue;
+                        esac
+
+                done;
+
+                if [ $last_name ]; then
+                        delete_from_db  $last_name $first_name;
+                else
+                        echo "No lastname given!";
+                fi
+
+                ;;
+        add)
+                while [ $1 ]; do
+                        shift;
+                        case "$1" in
+                                -firstname)
+                                        shift;
+                                        first_name=$1;
+                                        continue;
+                                        ;;
+                                -lastname)
+                                        shift;
+                                        last_name=$1;
+                                        continue;
+                                        ;;
+                                -email)
+                                        shift;
+                                        email=$1;
+                                        continue;
+                                        ;;
+                                -phone)
+                                        shift;
+                                        phone=$1;
+                                        continue;
+                                        ;;
+                                -name)
+                                        shift;
+                                        first_name=$1;
+                                        shift;
+                                        last_name=$1;
+                                        continue;
+                                        ;;
+                                -noclobber)
+                                        overwrite=true
+                                        continue;
+                                        ;;
+                        esac
+
+                done
+
+                if [ $last_name ]; then
+                        save_to_db;
+                else
+                        echo "Last name not given! Cannot save record!"; >&2
+                fi
+                ;;
+	replace)
+		while [ $1 ]; do
+			shift;
+			case "$1" in
+				-firstname)
+					shift;
+					first_name=$1;
+					continue;
+					;;
+				-lastname)
+					shift;
+					last_name=$1;
+					continue;
+					;;
+				-phone)
+					shift;
+					phone=$1;
+					continue;
+					;;
+				-email)
+					shift;
+					email=$1;
+					continue;
+					;;
+			esac
+		done
+
+		if [ $first_name ] && [ $last_name ]; then
+			replace_record;					
+		else
+			echo "Error: First name and last name required to replace record."
+		fi
+		;;
+        *)
+                echo "USAGE: contacts OPTION.. [EXTRAS].. " >&2;
+                echo "  read                                            interactive mode, asking for user information to store" >&2;
+                echo "          -noclobber                              add/read modes when inserting record" >&2
+                echo "  query                                           search mode" >&2;
+                echo "          -lastname=STRING" >&2
+                echo "          -firstname=STRING" >&2
+                echo "          -email=STRING" >&2
+                echo "          -phone=STRING" >&2
+                echo "  add                                             non-interactive mode, add user" >&2;
+                echo "          -noclobber                              add/read modes when inserting record" >&2
+                echo "          -firstname=STRING" >&2;
+                echo "          -lastname=STRING" >&2;
+                echo "          -email=STRING" >&2;
+                echo "          -phone=STRING" >&2;
+                echo "  delete  -firstname=STRING -lastname=STRING      delete user from database by first and last name" >&2;
+                ;;
+esac

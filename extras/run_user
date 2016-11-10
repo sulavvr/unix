@@ -1,0 +1,10 @@
+#!/bin/bash
+
+list=$(w -h | cut -d " " -f 1 -| cut -d "." -f 1 -);
+my_user=$(echo $USER | cut -d "." -f 1 -);
+
+echo $list > 'test.txt';
+#run=$(sed -i "s/${my_user}//" test.txt);
+
+echo "Users logged in: ";
+cat test.txt | tr [:space:] '\n' | sort;

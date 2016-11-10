@@ -1,0 +1,18 @@
+#! /bin/bash
+
+test=$(getent passwd | cut -d: -f3)
+
+min_uid=1001
+
+while [ true ]; do
+	find=$(echo $test | grep -cE '[^0-9]"$min_uid"$')
+	if [[ $find > 0 ]]; then
+		min_uid=$[min_uid+1]
+		echo $find : $min_uid
+		continue
+	else
+		break
+	fi	
+done
+
+echo $min_uid

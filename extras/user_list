@@ -1,0 +1,3 @@
+#!/bin/bash
+
+last -p now -w | cut -d " " -f 1 - | grep -v -i $USER | sort -u

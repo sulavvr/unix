@@ -1,0 +1,31 @@
+#! /bin/bash
+
+test=$(getent passwd | awk -F: '$3 > 1000 && $4 > 1000 {print $3, $4}')
+
+min_uid=1001
+min_gid=1001
+
+while [ true ]; do
+	find=$(echo $test | cut -d" " -f1 | grep -cE '[^0-9]"$min_uid"$')
+	if [[ $find > 0 ]]; then
+		min_uid=$[min_uid+1]
+		echo $find : $min_uid
+		continue
+	else
+		break
+	fi	
+done
+
+while [ true ]; do
+        find=$(echo $test | cut -d" " -f2 | grep -cE '[^0-9]"$min_gid"$')
+        if [[ $find > 0 ]]; then
+                min_gid=$[min_gid+1]
+                echo $find : $min_gid
+                continue
+        else
+                break
+        fi
+done
+
+
+echo $min_uid $min_gid
