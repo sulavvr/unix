@@ -7,14 +7,18 @@
 #include <stdlib.h>
 #include <limits.h>		// use for PATH_MAX (pwd)
 #include <sys/stat.h>
+#include <fcntl.h>
+#include <stdbool.h>
 
 #define MAXLINE 259
-#define PROMPT ">"
+#define PROMPT "> "
 #define MAX_ARG_LIST 200
 
 extern char **environ;
 #define MAX_CMD_SIZE 50
 #define SEARCH_FOR_CMD -1
+#define STDIN 0
+#define STDOUT 1
 typedef void(*buildInFunc) (char **);
 typedef struct {
 	char cmd[MAX_CMD_SIZE];
@@ -25,16 +29,27 @@ typedef struct {
 void execExit(char *cmd[]);
 void execPwd(char *cmd[]);
 void execChdir(char *cmd[]);
+void execAppendOut(char *cmd[]);
+void execRedirOut(char *cmd[]);
+void execRedirIn(char *cmd[]);
+void execEchoForRedirection(char *cmd[]);
 builtInCmd builtInCmds[] = {
 	{"exit", execExit},
 	{"pwd", execPwd},
-	{"cd", execChdir}
+	{"cd", execChdir},
 };
 
 int builtInCnt = sizeof(builtInCmds)/sizeof(builtInCmd);
 int isBuiltIn(char *cmd);
 void execBuiltIn(int i, char *cmd[]);
 
+int argument_count = 0;
+// redirection arguments
+char *redir_args[3] = {"<", ">", ">>"};
+char *checkIfExists(char *array[], int count);
+void setCurrentDir();
+void createChildProcess(char *args[], int redir);
+char *default_dir;
 // capture SIG_INT and recover
 sigjmp_buf ctrlc_buf;
 void ctrl_handlr(int signo) {
@@ -42,12 +57,11 @@ void ctrl_handlr(int signo) {
 }
 
 int main(int argc, char *argv[]) {
-
 	char line[MAXLINE];
-	pid_t childPID;
 	int argn;
-	char* args[MAX_ARG_LIST];
+	char *args[MAX_ARG_LIST];
 	int cmdn;
+	char *redir_type;
 
 	if (signal(SIGINT, ctrl_handlr) == SIG_ERR) {
 		fputs("ERROR: failed to register interrupts in kernel.\n", stderr);
@@ -58,6 +72,9 @@ int main(int argc, char *argv[]) {
 
 	for (;;) {
 		// prompt and get commandline
+		setCurrentDir();
+		fputs(default_dir, stdout);
+		fputs("\n", stdout);
 		fputs(PROMPT, stdout);
 		fgets(line, MAXLINE, stdin);
 
@@ -74,19 +91,22 @@ int main(int argc, char *argv[]) {
 		while (args[argn] != NULL && argn < MAX_ARG_LIST) {
 			args[++argn] = strtok(NULL, " \t");
 		}
+
+		argument_count = argn;
+
 		// execute commandline
-		if ((cmdn = isBuiltIn(args[0])) > -1) {
+		if ((redir_type = checkIfExists(args, argn)) != NULL) {
+			if (strcmp(redir_type, ">>") == 0) {
+				execAppendOut(args);
+			} else if (strcmp(redir_type, ">") == 0) {
+				execRedirOut(args);
+			} else if (strcmp(redir_type, "<") == 0) {
+				execRedirIn(args);
+			}
+		} else if ((cmdn = isBuiltIn(args[0])) > -1) {
 			execBuiltIn(cmdn, args);
 		} else {
-			childPID = fork();
-			if (childPID == 0) {
-				execv(line, argv);
-				fputs("ERROR: can't execute command.\n", stderr);
-
-				_exit(1);
-			} else {
-				waitpid(childPID, NULL, 0);
-			}
+			createChildProcess(args, 0);
 		}
 
 		// cleanup
@@ -96,6 +116,24 @@ int main(int argc, char *argv[]) {
 
 	return 0;
 
+}
+
+void createChildProcess(char *args[], int redir) {
+	pid_t childPID;
+	childPID = fork();
+	if (childPID == 0) {
+		if (redir == 0) {
+			execve(args[0], args, environ);
+		} else {
+			execv(args[0], NULL);
+		}
+		// execv(line, argv);
+		fprintf(stderr, "ERROR: can't execute command.\n");
+
+		_exit(1);
+	} else {
+		waitpid(childPID, NULL, 0);
+	}
 }
 
 int isBuiltIn(char *cmd) {
@@ -121,44 +159,134 @@ void execBuiltIn(int i, char *cmd[]) {
 	}
 }
 
-// execPwd prints out the current working directory
-void execPwd(char *cmd[]) {
+
+void setCurrentDir() {
 	char *buffer;
 	char *result;
 	int max_path = PATH_MAX + 1;
 
+	// allocate memory
 	buffer = (char *) malloc(max_path);
 	result = getcwd(buffer, max_path);
-
-	if (result != NULL) {
-		fprintf(stdout, "%s\n", buffer);
-	}
+	// free memory
 	free(buffer);
+
+	default_dir = result;
 }
 
+// execPwd prints out the current working directory
+void execPwd(char *cmd[]) {
+	setCurrentDir();
+	fprintf(stdout, "%s\n\n", default_dir);
+}
+
+char* checkIfExists(char *array[], int count) {
+	int i, j;
+
+	for (i = 0; i < count; i++) {
+		for (j = 0; j < 3; j++) {
+			if (strcmp(array[i], redir_args[j]) == 0) {
+				return redir_args[j];
+			}
+		}
+	}
+	return NULL;
+}
+
+// execChdir changes the current directory to the specified
 void execChdir(char *cmd[]) {
 	if (cmd[1] == NULL) {
-		fprintf(stderr, "ERROR: Path not specified.\n");
+		fprintf(stderr, "ERROR: Path not specified.\n\n");
 		return;
 	}
+	// get path from argument
 	char *path = cmd[1];
 	struct stat buffer;
+
 	if (stat(path, &buffer) == 0) {
-		fprintf(stdout, "%hu\n" ,buffer.st_mode);
 		if (buffer.st_mode & S_IFDIR) {
 			int v = chdir(path);
 			if (v < 0) {
 				fprintf(stderr, "ERROR: Something went wrong.");
-    			return;
+				return;
 			}
+			fprintf(stdout, "Current directory changed to %s\n\n", path);
     	} else {
-    		fprintf(stderr, "ERROR: Path specified is not a directory.");
-    		return;
+    		fprintf(stderr, "ERROR: Path specified is not a directory.\n\n");
     	}
+	} else {
+		fprintf(stderr, "ERROR: Path specified does not exist.\n");
 	}
+}
 
+void execEchoForRedirection(char *cmd[]) {
+	int i;
 
+	for (i = 1; i < argument_count - 2; i++) {
+		fprintf(stdout, "%s ", cmd[i]);
+	}
+	fprintf(stdout, "\n");
+}
 
+void execAppendOut(char *cmd[]) {
+	// duplicate STDOUT for restore later
+	int curr_out = dup(STDOUT);
+	// open file for redirection
+	int fd = open(cmd[argument_count-1], O_CREAT|O_APPEND|O_WRONLY, 0644);
+
+	// check if file descriptor is valid
+	if (fd < 0) {
+		fprintf(stderr, "File couldn't be opened!");
+		return;
+	}
+	// assign STDOUT to new fd and close STDOUT
+	dup2(fd, STDOUT);
+	// echo or pwd for redirection
+	if (strcmp(cmd[0], "echo") == 0) {
+		execEchoForRedirection(cmd);
+	} else if (strcmp(cmd[0], "pwd") == 0) {
+		execPwd(cmd);
+	} else {
+		createChildProcess(cmd, 1);
+	}
+	// restore stdout to console
+	dup2(curr_out, STDOUT);
+	// close descriptors
+	close(curr_out);
+	close(fd);
+}
+
+void execRedirOut(char *cmd[]) {
+	// duplicate STDOUT for restore later
+	int curr_out = dup(STDOUT);
+	// open file for redirection
+	int fd = open(cmd[argument_count-1], O_CREAT|O_TRUNC|O_WRONLY, 0644);
+
+	// check if file descriptor is valid
+	if (fd < 0) {
+		fprintf(stderr, "File couldn't be opened!");
+		return;
+	}
+	// assign STDOUT to new fd and close STDOUT
+	dup2(fd, STDOUT);
+	// echo or pwd for redirection
+	if (strcmp(cmd[0], "echo") == 0) {
+		execEchoForRedirection(cmd);
+	} else if (strcmp(cmd[0], "pwd") == 0) {
+		execPwd(cmd);
+	} else {
+		createChildProcess(cmd, 1);
+	}
+	// restore stdout to console
+	dup2(curr_out, STDOUT);
+	// close descriptors
+	close(curr_out);
+	close(fd);
+}
+
+void execRedirIn(char *cmd[]) {
+	// execPwd
+	printf("%s\n", cmd[0]);
 }
 
 void execExit(char *cmd[]) {
