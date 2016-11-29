@@ -125,7 +125,7 @@ void createChildProcess(char *args[], int redir) {
 		if (redir == 0) {
 			execve(args[0], args, environ);
 		} else {
-			execv(args[0], NULL);
+			execv(args[0], (char *[]){args[0], NULL});
 		}
 		// execv(line, argv);
 		fprintf(stderr, "ERROR: can't execute command.\n");
@@ -219,6 +219,7 @@ void execChdir(char *cmd[]) {
 	}
 }
 
+// echo command for redirection testing
 void execEchoForRedirection(char *cmd[]) {
 	int i;
 
@@ -228,6 +229,7 @@ void execEchoForRedirection(char *cmd[]) {
 	fprintf(stdout, "\n");
 }
 
+// append standard output ( >> )
 void execAppendOut(char *cmd[]) {
 	// duplicate STDOUT for restore later
 	int curr_out = dup(STDOUT);
@@ -256,6 +258,7 @@ void execAppendOut(char *cmd[]) {
 	close(fd);
 }
 
+// redirect standard output ( > )
 void execRedirOut(char *cmd[]) {
 	// duplicate STDOUT for restore later
 	int curr_out = dup(STDOUT);
@@ -284,6 +287,7 @@ void execRedirOut(char *cmd[]) {
 	close(fd);
 }
 
+// redirect standard input
 void execRedirIn(char *cmd[]) {
 	// execPwd
 	printf("%s\n", cmd[0]);
