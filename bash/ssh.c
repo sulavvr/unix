@@ -46,7 +46,7 @@ void execBuiltIn(int i, char *cmd[]);
 int argument_count = 0;
 // redirection arguments
 char *redir_args[3] = {"<", ">", ">>"};
-char *checkIfExists(char *array[], int count);
+char *checkIfExists(char *args[], int count);
 void setCurrentDir();
 void createChildProcess(char *args[], int redir);
 char *default_dir;
@@ -85,28 +85,43 @@ int main(int argc, char *argv[]) {
 			line[strlen(line) - 1] = '\0';
 		}
 
+		char *sem_args[MAX_ARG_LIST];
+		int s_argn;
 		// build argument list
-		args[argn=0] = strtok(line, " \t");
+		// split commands on semi-colon
+		sem_args[s_argn=0] = strtok(line, ";");
 
-		while (args[argn] != NULL && argn < MAX_ARG_LIST) {
-			args[++argn] = strtok(NULL, " \t");
+		while (sem_args[s_argn] != NULL && s_argn < MAX_ARG_LIST) {
+			sem_args[++s_argn] = strtok(NULL, ";");
 		}
 
-		argument_count = argn;
+		int inc = 0;
+		// allow multiple commands
+		while (s_argn != 0) {
+			// build argument list
+			args[argn=0] = strtok(sem_args[inc], " \t");
 
-		// execute commandline
-		if ((redir_type = checkIfExists(args, argn)) != NULL) {
-			if (strcmp(redir_type, ">>") == 0) {
-				execAppendOut(args);
-			} else if (strcmp(redir_type, ">") == 0) {
-				execRedirOut(args);
-			} else if (strcmp(redir_type, "<") == 0) {
-				execRedirIn(args);
+			while (args[argn] != NULL && argn < MAX_ARG_LIST) {
+				args[++argn] = strtok(NULL, " \t");
 			}
-		} else if ((cmdn = isBuiltIn(args[0])) > -1) {
-			execBuiltIn(cmdn, args);
-		} else {
-			createChildProcess(args, 0);
+
+			argument_count = argn;
+			// execute commandline
+			if ((redir_type = checkIfExists(args, argn)) != NULL) {
+				if (strcmp(redir_type, ">>") == 0) {
+					execAppendOut(args);
+				} else if (strcmp(redir_type, ">") == 0) {
+					execRedirOut(args);
+				} else if (strcmp(redir_type, "<") == 0) {
+					execRedirIn(args);
+				}
+			} else if ((cmdn = isBuiltIn(args[0])) > -1) {
+				execBuiltIn(cmdn, args);
+			} else {
+				createChildProcess(args, 0);
+			}
+			inc++;
+			s_argn--;
 		}
 
 		// cleanup
@@ -180,12 +195,12 @@ void execPwd(char *cmd[]) {
 	fprintf(stdout, "%s\n\n", default_dir);
 }
 
-char* checkIfExists(char *array[], int count) {
+char* checkIfExists(char *args[], int count) {
 	int i, j;
 
 	for (i = 0; i < count; i++) {
 		for (j = 0; j < 3; j++) {
-			if (strcmp(array[i], redir_args[j]) == 0) {
+			if (strcmp(args[i], redir_args[j]) == 0) {
 				return redir_args[j];
 			}
 		}
