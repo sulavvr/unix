@@ -1,7 +1,6 @@
 /**************************************
  * File: threads.c
  * Name: Sulav Regmi
- * ID: 50211843
  * Unix Systems Programming
  * Dr. Jeff Jenness
  * Creates N threads which increments a shared variable
