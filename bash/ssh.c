@@ -1,7 +1,6 @@
 /**************************************
  * File: ssh.c
  * Name: Sulav Regmi
- * ID: 50211843
  * Unix Systems Programming
  * Dr. Jeff Jenness
  * Building a simple shell to run built in commands like:
